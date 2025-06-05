@@ -1,347 +1,700 @@
-import React, { useState, useEffect, useRef } from 'react';
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memory O'yini</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-const MemoryGame = () => {
-  // Emoji to'plamlari
-  const emojiSets = {
-    classic: ['🎮', '🚀', '🎨', '🎵', '⚽', '🍕', '🌟', '🦄'],
-    animals: ['🐶', '🐱', '🐰', '🐻', '🦊', '🐸', '🐷', '🐵'],
-    fruits: ['🍎', '🍌', '🍊', '🍇', '🍓', '🥝', '🍑', '🥭'],
-    vehicles: ['🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑'],
-    nature: ['🌺', '🌻', '🌷', '🌹', '🌸', '🌼', '🌵', '🌲'],
-    sports: ['⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🏓', '🏸']
-  };
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
 
-  // Qiyinchilik darajalari
-  const difficulties = {
-    easy: { name: 'Oson', size: 4, pairs: 8 },
-    medium: { name: "O'rta", size: 6, pairs: 18 },
-    hard: { name: 'Qiyin', size: 8, pairs: 32 }
-  };
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
 
-  const [gameState, setGameState] = useState('menu'); // menu, playing, won
-  const [difficulty, setDifficulty] = useState('easy');
-  const [emojiSet, setEmojiSet] = useState('classic');
-  const [cards, setCards] = useState([]);
-  const [flippedCards, setFlippedCards] = useState([]);
-  const [matchedPairs, setMatchedPairs] = useState([]);
-  const [moves, setMoves] = useState(0);
-  const [timeElapsed, setTimeElapsed] = useState(0);
-  const [gameStartTime, setGameStartTime] = useState(null);
-  const [bestTimes, setBestTimes] = useState({
-    easy: null,
-    medium: null,
-    hard: null
-  });
-  
-  const audioRef = useRef(null);
-  const timerRef = useRef(null);
+        .menu-screen, .game-screen {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            text-center;
+        }
 
-  // Ovozli effektlar (Web Audio API)
-  const playSound = (type) => {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-    
-    switch(type) {
-      case 'flip':
-        oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
-        break;
-      case 'match':
-        oscillator.frequency.setValueAtTime(660, audioContext.currentTime);
-        oscillator.frequency.exponentialRampToValueAtTime(880, audioContext.currentTime + 0.2);
-        break;
-      case 'win':
-        oscillator.frequency.setValueAtTime(523, audioContext.currentTime);
-        oscillator.frequency.exponentialRampToValueAtTime(1047, audioContext.currentTime + 0.5);
-        break;
-      default:
-        oscillator.frequency.setValueAtTime(220, audioContext.currentTime);
-    }
-    
-    oscillator.start();
-    oscillator.stop(audioContext.currentTime + 0.5);
-  };
+        .menu-screen h1 {
+            font-size: 3rem;
+            color: #333;
+            margin-bottom: 2rem;
+        }
 
-  // Timer
-  useEffect(() => {
-    if (gameState === 'playing' && gameStartTime) {
-      timerRef.current = setInterval(() => {
-        setTimeElapsed(Math.floor((Date.now() - gameStartTime) / 1000));
-      }, 1000);
-    } else {
-      clearInterval(timerRef.current);
-    }
-    
-    return () => clearInterval(timerRef.current);
-  }, [gameState, gameStartTime]);
+        .difficulty-section, .emoji-section {
+            margin-bottom: 2rem;
+        }
 
-  // O'yinni boshlash
-  const initializeGame = () => {
-    const currentDifficulty = difficulties[difficulty];
-    const symbols = emojiSets[emojiSet].slice(0, currentDifficulty.pairs);
-    
-    const shuffledCards = [...symbols, ...symbols]
-      .sort(() => Math.random() - 0.5)
-      .map((symbol, index) => ({
-        id: index,
-        symbol,
-        isFlipped: false,
-        isMatched: false
-      }));
-    
-    setCards(shuffledCards);
-    setFlippedCards([]);
-    setMatchedPairs([]);
-    setMoves(0);
-    setTimeElapsed(0);
-    setGameStartTime(Date.now());
-    setGameState('playing');
-  };
+        .difficulty-section h3, .emoji-section h3 {
+            font-size: 1.2rem;
+            color: #555;
+            margin-bottom: 1rem;
+        }
 
-  // Kartani ochish
-  const flipCard = (cardId) => {
-    if (flippedCards.length === 2 || 
-        cards.find(card => card.id === cardId)?.isMatched ||
-        flippedCards.includes(cardId)) {
-      return;
-    }
+        .difficulty-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 1rem;
+        }
 
-    playSound('flip');
-    const newFlippedCards = [...flippedCards, cardId];
-    setFlippedCards(newFlippedCards);
+        .emoji-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 1rem;
+        }
 
-    if (newFlippedCards.length === 2) {
-      setMoves(moves + 1);
-      const [firstCard, secondCard] = newFlippedCards.map(id => 
-        cards.find(card => card.id === id)
-      );
+        .btn {
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 1rem;
+        }
 
-      if (firstCard.symbol === secondCard.symbol) {
-        // Mos keldi
-        playSound('match');
-        setTimeout(() => {
-          setMatchedPairs([...matchedPairs, firstCard.symbol]);
-          setFlippedCards([]);
-        }, 500);
-      } else {
-        // Mos kelmadi
-        setTimeout(() => {
-          setFlippedCards([]);
-        }, 1000);
-      }
-    }
-  };
+        .btn:hover {
+            transform: scale(1.05);
+        }
 
-  // O'yin tugaganini tekshirish
-  useEffect(() => {
-    const currentDifficulty = difficulties[difficulty];
-    if (matchedPairs.length === currentDifficulty.pairs && gameState === 'playing') {
-      playSound('win');
-      setGameState('won');
-      
-      // Eng yaxshi vaqtni saqlash
-      if (!bestTimes[difficulty] || timeElapsed < bestTimes[difficulty]) {
-        setBestTimes(prev => ({
-          ...prev,
-          [difficulty]: timeElapsed
-        }));
-      }
-    }
-  }, [matchedPairs, difficulty, gameState, timeElapsed, bestTimes]);
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
 
-  const isCardVisible = (card) => {
-    return flippedCards.includes(card.id) || matchedPairs.includes(card.symbol);
-  };
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
 
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
 
-  // Menu sahifasi
-  if (gameState === 'menu') {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-purple-600 via-blue-600 to-teal-600 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 text-center max-w-lg w-full">
-          <h1 className="text-4xl font-bold text-gray-800 mb-6">
-            🧠 Memory O'yini
-          </h1>
-          
-          {/* Qiyinchilik darajasi */}
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold text-gray-700 mb-3">Qiyinchilik darajasi:</h3>
-            <div className="grid grid-cols-3 gap-2">
-              {Object.entries(difficulties).map(([key, diff]) => (
-                <button
-                  key={key}
-                  onClick={() => setDifficulty(key)}
-                  className={`p-3 rounded-lg font-semibold transition-all ${
-                    difficulty === key 
-                      ? 'bg-purple-500 text-white transform scale-105' 
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
-                >
-                  {diff.name}
-                  <div className="text-xs">{diff.size}x{diff.size}</div>
-                </button>
-              ))}
-            </div>
-          </div>
+        .btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            transform: scale(1.05);
+        }
 
-          {/* Emoji to'plami */}
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold text-gray-700 mb-3">Emoji to'plami:</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {Object.entries(emojiSets).map(([key, emojis]) => (
-                <button
-                  key={key}
-                  onClick={() => setEmojiSet(key)}
-                  className={`p-3 rounded-lg font-semibold transition-all ${
-                    emojiSet === key 
-                      ? 'bg-blue-500 text-white transform scale-105' 
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
-                >
-                  <div className="text-2xl mb-1">{emojis.slice(0, 3).join('')}</div>
-                  <div className="text-xs capitalize">{key}</div>
-                </button>
-              ))}
-            </div>
-          </div>
+        .start-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 40px;
+            font-size: 1.5rem;
+            border-radius: 15px;
+            margin-top: 1rem;
+            width: 100%;
+        }
 
-          {/* Eng yaxshi vaqtlar */}
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold text-gray-700 mb-3">🏆 Eng yaxshi vaqtlar:</h3>
-            <div className="text-sm text-gray-600">
-              {Object.entries(difficulties).map(([key, diff]) => (
-                <div key={key} className="flex justify-between">
-                  <span>{diff.name}:</span>
-                  <span className="font-mono">
-                    {bestTimes[key] ? formatTime(bestTimes[key]) : '--:--'}
-                  </span>
+        .game-header {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .game-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .stats {
+            display: flex;
+            gap: 30px;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .game-board {
+            display: grid;
+            gap: 10px;
+            margin: 0 auto 20px;
+            max-width: 600px;
+        }
+
+        .grid-4 { grid-template-columns: repeat(4, 1fr); }
+        .grid-6 { grid-template-columns: repeat(6, 1fr); }
+        .grid-8 { grid-template-columns: repeat(8, 1fr); }
+
+        .card {
+            aspect-ratio: 1;
+            border: none;
+            border-radius: 15px;
+            font-size: 2rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card:hover {
+            transform: scale(1.05);
+        }
+
+        .card.hidden {
+            background: linear-gradient(135deg, #ccc 0%, #999 100%);
+            color: #666;
+        }
+
+        .card.flipped {
+            background: linear-gradient(135deg, #ffd700 0%, #ff8c00 100%);
+            color: white;
+        }
+
+        .card.matched {
+            background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+            color: white;
+            animation: pulse 0.5s ease-in-out;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .game-controls {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .game-controls .btn {
+            margin: 0 10px;
+            padding: 10px 20px;
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            max-width: 400px;
+            animation: bounce 0.5s ease-in-out;
+        }
+
+        @keyframes bounce {
+            0% { transform: scale(0.5); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .modal h2 {
+            font-size: 2rem;
+            color: #333;
+            margin-bottom: 1rem;
+        }
+
+        .modal .trophy {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        .best-times {
+            background: #f9f9f9;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 1rem;
+        }
+
+        .best-times h3 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .time-record {
+            display: flex;
+            justify-content: space-between;
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .emoji-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats {
+                gap: 15px;
+            }
+            
+            .card {
+                font-size: 1.5rem;
+            }
+            
+            .grid-8 .card {
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Menu Screen -->
+        <div id="menuScreen" class="menu-screen">
+            <h1>🧠 Memory O'yini</h1>
+            
+            <div class="difficulty-section">
+                <h3>Qiyinchilik darajasi:</h3>
+                <div class="difficulty-grid">
+                    <button class="btn btn-secondary active" data-difficulty="easy">
+                        Oson<br><small>4x4</small>
+                    </button>
+                    <button class="btn btn-secondary" data-difficulty="medium">
+                        O'rta<br><small>6x6</small>
+                    </button>
+                    <button class="btn btn-secondary" data-difficulty="hard">
+                        Qiyin<br><small>8x8</small>
+                    </button>
                 </div>
-              ))}
             </div>
-          </div>
 
-          <button
-            onClick={initializeGame}
-            className="bg-gradient-to-r from-purple-500 to-blue-500 text-white px-8 py-4 rounded-lg text-xl font-semibold hover:from-purple-600 hover:to-blue-600 transform hover:scale-105 transition-all duration-200 shadow-lg w-full"
-          >
-            O'yinni Boshlash 🚀
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const currentDifficulty = difficulties[difficulty];
-  const gridCols = currentDifficulty.size === 4 ? 'grid-cols-4' : 
-                   currentDifficulty.size === 6 ? 'grid-cols-6' : 'grid-cols-8';
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-blue-600 to-teal-600 p-4">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-xl shadow-lg p-4 mb-6">
-          <div className="flex justify-between items-center flex-wrap gap-4">
-            <h1 className="text-2xl font-bold text-gray-800">Memory O'yini</h1>
-            <div className="flex gap-6">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-purple-600">{moves}</div>
-                <div className="text-sm text-gray-600">Harakat</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">{matchedPairs.length}/{currentDifficulty.pairs}</div>
-                <div className="text-sm text-gray-600">Juftlik</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-600 font-mono">{formatTime(timeElapsed)}</div>
-                <div className="text-sm text-gray-600">Vaqt</div>
-              </div>
+            <div class="emoji-section">
+                <h3>Emoji to'plami:</h3>
+                <div class="emoji-grid">
+                    <button class="btn btn-secondary active" data-emoji="classic">
+                        <div style="font-size: 1.5rem; margin-bottom: 5px;">🎮🚀🎨</div>
+                        Classic
+                    </button>
+                    <button class="btn btn-secondary" data-emoji="animals">
+                        <div style="font-size: 1.5rem; margin-bottom: 5px;">🐶🐱🐰</div>
+                        Animals
+                    </button>
+                    <button class="btn btn-secondary" data-emoji="fruits">
+                        <div style="font-size: 1.5rem; margin-bottom: 5px;">🍎🍌🍊</div>
+                        Fruits
+                    </button>
+                    <button class="btn btn-secondary" data-emoji="vehicles">
+                        <div style="font-size: 1.5rem; margin-bottom: 5px;">🚗🚕🚙</div>
+                        Vehicles
+                    </button>
+                    <button class="btn btn-secondary" data-emoji="nature">
+                        <div style="font-size: 1.5rem; margin-bottom: 5px;">🌺🌻🌷</div>
+                        Nature
+                    </button>
+                    <button class="btn btn-secondary" data-emoji="sports">
+                        <div style="font-size: 1.5rem; margin-bottom: 5px;">⚽🏀🏈</div>
+                        Sports
+                    </button>
+                </div>
             </div>
-          </div>
-        </div>
 
-        {/* Game Board */}
-        <div className={`grid ${gridCols} gap-2 mb-6 max-w-2xl mx-auto`}>
-          {cards.map((card) => (
-            <div
-              key={card.id}
-              onClick={() => flipCard(card.id)}
-              className={`
-                aspect-square rounded-xl cursor-pointer transform transition-all duration-300 flex items-center justify-center font-bold shadow-lg
-                ${currentDifficulty.size === 8 ? 'text-2xl' : 'text-3xl'}
-                ${isCardVisible(card)
-                  ? matchedPairs.includes(card.symbol)
-                    ? 'bg-gradient-to-br from-green-400 to-green-600 text-white scale-105 animate-pulse'
-                    : 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white'
-                  : 'bg-gradient-to-br from-gray-300 to-gray-500 hover:from-gray-400 hover:to-gray-600 hover:scale-105'
-                }
-              `}
-            >
-              {isCardVisible(card) ? card.symbol : '?'}
+            <div class="best-times">
+                <h3>🏆 Eng yaxshi vaqtlar:</h3>
+                <div class="time-record">
+                    <span>Oson:</span>
+                    <span id="bestEasy">--:--</span>
+                </div>
+                <div class="time-record">
+                    <span>O'rta:</span>
+                    <span id="bestMedium">--:--</span>
+                </div>
+                <div class="time-record">
+                    <span>Qiyin:</span>
+                    <span id="bestHard">--:--</span>
+                </div>
             </div>
-          ))}
+
+            <button class="btn start-btn" onclick="startGame()">
+                O'yinni Boshlash 🚀
+            </button>
         </div>
 
-        {/* G'alaba modal */}
-        {gameState === 'won' && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-2xl shadow-2xl p-8 text-center max-w-sm animate-bounce">
-              <div className="text-6xl mb-4">🎉</div>
-              <h2 className="text-3xl font-bold text-gray-800 mb-2">Tabriklaymiz!</h2>
-              <div className="text-gray-600 mb-4 space-y-1">
-                <p>Vaqt: <span className="font-mono font-bold">{formatTime(timeElapsed)}</span></p>
-                <p>Harakatlar: <span className="font-bold">{moves}</span></p>
-                <p>Daraja: <span className="font-bold">{currentDifficulty.name}</span></p>
-                {bestTimes[difficulty] === timeElapsed && (
-                  <p className="text-green-600 font-bold">🏆 Yangi rekord!</p>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={initializeGame}
-                  className="bg-gradient-to-r from-green-500 to-blue-500 text-white px-4 py-2 rounded-lg font-semibold hover:from-green-600 hover:to-blue-600 transform hover:scale-105 transition-all duration-200 shadow-lg"
-                >
-                  Qayta O'ynash
-                </button>
-                <button
-                  onClick={() => setGameState('menu')}
-                  className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transform hover:scale-105 transition-all duration-200 shadow-lg"
-                >
-                  Menyu
-                </button>
-              </div>
+        <!-- Game Screen -->
+        <div id="gameScreen" class="game-screen hidden">
+            <div class="game-header">
+                <div class="game-title">Memory O'yini</div>
+                <div class="stats">
+                    <div class="stat">
+                        <div class="stat-value" id="movesCount">0</div>
+                        <div class="stat-label">Harakat</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="pairsCount">0/8</div>
+                        <div class="stat-label">Juftlik</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="timeCount">0:00</div>
+                        <div class="stat-label">Vaqt</div>
+                    </div>
+                </div>
             </div>
-          </div>
-        )}
 
-        {/* Tugmalar */}
-        <div className="text-center space-x-4">
-          <button
-            onClick={initializeGame}
-            className="bg-white text-purple-600 px-6 py-2 rounded-lg font-semibold hover:bg-gray-100 transform hover:scale-105 transition-all duration-200 shadow-lg"
-          >
-            Qayta Boshlash
-          </button>
-          <button
-            onClick={() => setGameState('menu')}
-            className="bg-white text-blue-600 px-6 py-2 rounded-lg font-semibold hover:bg-gray-100 transform hover:scale-105 transition-all duration-200 shadow-lg"
-          >
-            Menyu
-          </button>
+            <div id="gameBoard" class="game-board grid-4">
+                <!-- Cards will be generated here -->
+            </div>
+
+            <div class="game-controls">
+                <button class="btn btn-primary" onclick="restartGame()">Qayta Boshlash</button>
+                <button class="btn btn-secondary" onclick="showMenu()">Menyu</button>
+            </div>
         </div>
-      </div>
+
+        <!-- Win Modal -->
+        <div id="winModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="trophy">🎉</div>
+                <h2>Tabriklaymiz!</h2>
+                <div id="winStats"></div>
+                <div style="margin-top: 20px;">
+                    <button class="btn btn-primary" onclick="restartGame()">Qayta O'ynash</button>
+                    <button class="btn btn-secondary" onclick="showMenu()">Menyu</button>
+                </div>
+            </div>
+        </div>
     </div>
-  );
-};
 
-export default MemoryGame;
+    <script>
+        // Game state
+        let gameState = {
+            difficulty: 'easy',
+            emojiSet: 'classic',
+            cards: [],
+            flippedCards: [],
+            matchedPairs: [],
+            moves: 0,
+            timeElapsed: 0,
+            gameStartTime: null,
+            timerInterval: null,
+            bestTimes: JSON.parse(localStorage.getItem('memoryGameBestTimes')) || {
+                easy: null,
+                medium: null,
+                hard: null
+            }
+        };
+
+        // Emoji sets
+        const emojiSets = {
+            classic: ['🎮', '🚀', '🎨', '🎵', '⚽', '🍕', '🌟', '🦄'],
+            animals: ['🐶', '🐱', '🐰', '🐻', '🦊', '🐸', '🐷', '🐵'],
+            fruits: ['🍎', '🍌', '🍊', '🍇', '🍓', '🥝', '🍑', '🥭'],
+            vehicles: ['🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑'],
+            nature: ['🌺', '🌻', '🌷', '🌹', '🌸', '🌼', '🌵', '🌲'],
+            sports: ['⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🏓', '🏸']
+        };
+
+        // Difficulties
+        const difficulties = {
+            easy: { name: 'Oson', size: 4, pairs: 8 },
+            medium: { name: "O'rta", size: 6, pairs: 18 },
+            hard: { name: 'Qiyin', size: 8, pairs: 32 }
+        };
+
+        // Sound effects
+        function playSound(type) {
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+                
+                switch(type) {
+                    case 'flip':
+                        oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
+                        break;
+                    case 'match':
+                        oscillator.frequency.setValueAtTime(660, audioContext.currentTime);
+                        oscillator.frequency.exponentialRampToValueAtTime(880, audioContext.currentTime + 0.2);
+                        break;
+                    case 'win':
+                        oscillator.frequency.setValueAtTime(523, audioContext.currentTime);
+                        oscillator.frequency.exponentialRampToValueAtTime(1047, audioContext.currentTime + 0.5);
+                        break;
+                }
+                
+                oscillator.start();
+                oscillator.stop(audioContext.currentTime + 0.5);
+            } catch (e) {
+                // Silent fail if audio not supported
+            }
+        }
+
+        // Initialize menu
+        function initMenu() {
+            // Difficulty selection
+            document.querySelectorAll('[data-difficulty]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('[data-difficulty]').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    gameState.difficulty = btn.dataset.difficulty;
+                });
+            });
+
+            // Emoji selection
+            document.querySelectorAll('[data-emoji]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('[data-emoji]').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    gameState.emojiSet = btn.dataset.emoji;
+                });
+            });
+
+            updateBestTimes();
+        }
+
+        // Update best times display
+        function updateBestTimes() {
+            document.getElementById('bestEasy').textContent = 
+                gameState.bestTimes.easy ? formatTime(gameState.bestTimes.easy) : '--:--';
+            document.getElementById('bestMedium').textContent = 
+                gameState.bestTimes.medium ? formatTime(gameState.bestTimes.medium) : '--:--';
+            document.getElementById('bestHard').textContent = 
+                gameState.bestTimes.hard ? formatTime(gameState.bestTimes.hard) : '--:--';
+        }
+
+        // Format time
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // Start game
+        function startGame() {
+            const difficulty = difficulties[gameState.difficulty];
+            const symbols = emojiSets[gameState.emojiSet].slice(0, difficulty.pairs);
+            
+            // Create cards
+            const cards = [...symbols, ...symbols]
+                .sort(() => Math.random() - 0.5)
+                .map((symbol, index) => ({
+                    id: index,
+                    symbol,
+                    isFlipped: false,
+                    isMatched: false
+                }));
+            
+            gameState.cards = cards;
+            gameState.flippedCards = [];
+            gameState.matchedPairs = [];
+            gameState.moves = 0;
+            gameState.timeElapsed = 0;
+            gameState.gameStartTime = Date.now();
+            
+            // Setup UI
+            document.getElementById('menuScreen').classList.add('hidden');
+            document.getElementById('gameScreen').classList.remove('hidden');
+            
+            // Setup game board
+            const gameBoard = document.getElementById('gameBoard');
+            gameBoard.className = `game-board grid-${difficulty.size}`;
+            gameBoard.innerHTML = '';
+            
+            cards.forEach(card => {
+                const cardElement = document.createElement('button');
+                cardElement.className = 'card hidden';
+                cardElement.textContent = '?';
+                cardElement.dataset.cardId = card.id;
+                cardElement.addEventListener('click', () => flipCard(card.id));
+                gameBoard.appendChild(cardElement);
+            });
+            
+            // Start timer
+            startTimer();
+            updateStats();
+        }
+
+        // Start timer
+        function startTimer() {
+            gameState.timerInterval = setInterval(() => {
+                gameState.timeElapsed = Math.floor((Date.now() - gameState.gameStartTime) / 1000);
+                updateStats();
+            }, 1000);
+        }
+
+        // Stop timer
+        function stopTimer() {
+            if (gameState.timerInterval) {
+                clearInterval(gameState.timerInterval);
+                gameState.timerInterval = null;
+            }
+        }
+
+        // Update stats
+        function updateStats() {
+            const difficulty = difficulties[gameState.difficulty];
+            document.getElementById('movesCount').textContent = gameState.moves;
+            document.getElementById('pairsCount').textContent = `${gameState.matchedPairs.length}/${difficulty.pairs}`;
+            document.getElementById('timeCount').textContent = formatTime(gameState.timeElapsed);
+        }
+
+        // Flip card
+        function flipCard(cardId) {
+            if (gameState.flippedCards.length === 2) return;
+            
+            const card = gameState.cards.find(c => c.id === cardId);
+            if (!card || card.isMatched || gameState.flippedCards.includes(cardId)) return;
+            
+            playSound('flip');
+            gameState.flippedCards.push(cardId);
+            
+            // Update UI
+            const cardElement = document.querySelector(`[data-card-id="${cardId}"]`);
+            cardElement.classList.remove('hidden');
+            cardElement.classList.add('flipped');
+            cardElement.textContent = card.symbol;
+            
+            if (gameState.flippedCards.length === 2) {
+                gameState.moves++;
+                updateStats();
+                
+                const [firstId, secondId] = gameState.flippedCards;
+                const firstCard = gameState.cards.find(c => c.id === firstId);
+                const secondCard = gameState.cards.find(c => c.id === secondId);
+                
+                setTimeout(() => {
+                    if (firstCard.symbol === secondCard.symbol) {
+                        // Match found
+                        playSound('match');
+                        gameState.matchedPairs.push(firstCard.symbol);
+                        
+                        const firstElement = document.querySelector(`[data-card-id="${firstId}"]`);
+                        const secondElement = document.querySelector(`[data-card-id="${secondId}"]`);
+                        
+                        firstElement.classList.remove('flipped');
+                        firstElement.classList.add('matched');
+                        secondElement.classList.remove('flipped');
+                        secondElement.classList.add('matched');
+                        
+                        firstCard.isMatched = true;
+                        secondCard.isMatched = true;
+                        
+                        // Check win condition
+                        if (gameState.matchedPairs.length === difficulties[gameState.difficulty].pairs) {
+                            setTimeout(() => {
+                                winGame();
+                            }, 500);
+                        }
+                    } else {
+                        // No match
+                        const firstElement = document.querySelector(`[data-card-id="${firstId}"]`);
+                        const secondElement = document.querySelector(`[data-card-id="${secondId}"]`);
+                        
+                        firstElement.classList.remove('flipped');
+                        firstElement.classList.add('hidden');
+                        firstElement.textContent = '?';
+                        
+                        secondElement.classList.remove('flipped');
+                        secondElement.classList.add('hidden');
+                        secondElement.textContent = '?';
+                    }
+                    
+                    gameState.flippedCards = [];
+                    updateStats();
+                }, 1000);
+            }
+        }
+
+        // Win game
+        function winGame() {
+            playSound('win');
+            stopTimer();
+            
+            // Check for new best time
+            const isNewRecord = !gameState.bestTimes[gameState.difficulty] || 
+                               gameState.timeElapsed < gameState.bestTimes[gameState.difficulty];
+            
+            if (isNewRecord) {
+                gameState.bestTimes[gameState.difficulty] = gameState.timeElapsed;
+                localStorage.setItem('memoryGameBestTimes', JSON.stringify(gameState.bestTimes));
+            }
+            
+            // Show win modal
+            const winStats = document.getElementById('winStats');
+            winStats.innerHTML = `
+                <p>Vaqt: <strong>${formatTime(gameState.timeElapsed)}</strong></p>
+                <p>Harakatlar: <strong>${gameState.moves}</strong></p>
+                <p>Daraja: <strong>${difficulties[gameState.difficulty].name}</strong></p>
+                ${isNewRecord ? '<p style="color: #4caf50; font-weight: bold;">🏆 Yangi rekord!</p>' : ''}
+            `;
+            
+            document.getElementById('winModal').classList.remove('hidden');
+        }
+
+        // Restart game
+        function restartGame() {
+            document.getElementById('winModal').classList.add('hidden');
+            stopTimer();
+            startGame();
+        }
+
+        // Show menu
+        function showMenu() {
+            document.getElementById('winModal').classList.add('hidden');
+            document.getElementById('gameScreen').classList.add('hidden');
+            document.getElementById('menuScreen').classList.remove('hidden');
+            stopTimer();
+            updateBestTimes();
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            initMenu();
+        });
+    </script>
+</body>
+</html>
